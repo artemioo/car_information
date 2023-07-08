@@ -1,8 +1,15 @@
-from fastapi import FastAPI, Query, Path, HTTPException, status, Body
+from fastapi import FastAPI, Query, Path, HTTPException, status, Body, Request
 from fastapi.encoders import jsonable_encoder
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
+
+from starlette.responses import HTMLResponse
+
 from database import cars
+
+templates = Jinja2Templates(directory='templates')
 
 
 class Car(BaseModel):
@@ -17,10 +24,11 @@ class Car(BaseModel):
 
 app = FastAPI()
 
+app.mount('/static', StaticFiles(directory="static"), name='static')
 
-@app.get("/")
-def root():
-    return {"welcome": "to our site"}
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    return templates.TemplateResponse('home.html', {"request": request, "name": 'Artem'})
 
 
 @app.get('/cars', response_model=List[Dict[str, Car]]) # тут указываем какой будет переменная response
@@ -59,10 +67,7 @@ async def update_car(id: int, car: Car = Body(...)):
     if not stored:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not find car with given ID")
     stored = Car(**stored) # создаем новый экземпляр и распаковываем в него старый
-    print("stored- ",stored) # make='CarBrand' model='Fast' year=1998 price=25000.0 engine='V8' autonomous=False sold=['NA', 'EU']
-    new = car.dict(exclude_unset=True) # создаст словарь без значений по умолчанию или пустых
-    print("car- ", car) # make=None model=None year=2003 price=3000.0 engine='V4' autonomous=None sold=None
-    print("new- ", new) # {'year': 2003, 'price': 3000.0}
+    new = car.dict(exclude_unset=True) # создаст словарь без значений по умолчанию или пусты
     new = stored.copy(update=new) # копирует stored при этом заменяя значения
     cars[id] = jsonable_encoder(new) # Преобразуйте скопированную модель во что-то, что можно сохранить в вашей БД
     response = {}
