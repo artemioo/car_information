@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Query, Path, HTTPException, status, Body, Request
+from fastapi import FastAPI, Query, Path, HTTPException, status, Body, Request, Form
+from fastapi.responses import RedirectResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -26,27 +27,33 @@ app = FastAPI()
 
 app.mount('/static', StaticFiles(directory="static"), name='static')
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=RedirectResponse)
 async def root(request: Request):
-    return templates.TemplateResponse('home.html', {"request": request, "name": 'Artem'})
+    return RedirectResponse(url="/cars")
 
 
-@app.get('/cars', response_model=List[Dict[str, Car]]) # тут указываем какой будет переменная response
-async def get_cars(number: Optional[str] = Query("10",max_length=3)):
+@app.get('/cars', response_class=HTMLResponse) # тут указываем какой будет переменная response
+async def get_cars(request: Request, number: Optional[str] = Query("10",max_length=3)):
     response = []
     for id, car in list(cars.items())[:int(number)]: # делает срез ДО query параметра
-        to_add = {}
-        to_add[id] = car
-        response.append(to_add)
+        response.append((id, car))
+    return templates.TemplateResponse('index.html', {"request": request, "cars": response})
+
+
+@app.post('/search', response_class=RedirectResponse)
+async def search_cars(id: str = Form(...)):
+    return RedirectResponse("/cars/" + id, status_code=302)
+
+
+@app.get("/cars/{id}", response_class=HTMLResponse)
+def get_car_by_id(request: Request, id: int = Path(...,ge=0,lt=1000)):
+    car = cars.get(id)
+    response = templates.TemplateResponse("search.html", {"request": request, "car": car, "id": id, "title": "Search Car"})
+    if not car:
+        response.status_code = status.HTTP_404_NOT_FOUND
     return response
 
 
-@app.get('/cars/{id}', response_model=Car)
-async def get_car_by_id(id: int = Path(..., ge=0, lt=1000)):
-    car = cars.get(id)
-    if not car:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not find car by ID.")
-    return car
 
 
 @app.post('/cars', status_code=status.HTTP_201_CREATED)
@@ -80,3 +87,4 @@ async def delete_car(id: int):
     if not cars.get(id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not find car by ID.")
     del cars[id]
+
