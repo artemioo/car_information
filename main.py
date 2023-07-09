@@ -79,23 +79,41 @@ async def add_cars(make: Optional[str] = Form(...),
         min_id += 1
     return RedirectResponse(url='/cars', status_code=302)
 
-@app.put("/cars/{id}", response_model=Dict[str, Car])
-async def update_car(id: int, car: Car = Body(...)):
+
+@app.get("/edit", response_class=HTMLResponse)
+def edit_car(request: Request, id: int = Query(...)):
+    car = cars.get(id)
+    if not car:
+        return templates.TemplateResponse("search.html", {"request": request, "id": id, "car": car}, status_code=status.HTTP_404_NOT_FOUND)
+    return templates.TemplateResponse("edit.html", {"request": request, "id": id, "car": car})
+
+
+@app.post("/cars/{id}")
+async def update_car(request: Request, id: int,
+                   make: Optional[str] = Form(None),
+                   model: Optional[str] = Form(None),
+                   year: Optional[str] = Form(None),
+                   price: Optional[str] = Form(None),
+                   engine: Optional[str] = Form(None),
+                   autonomous: Optional[bool] = Form(None),
+                   sold: Optional[List[str]] = Form(None)):
     stored = cars.get(id) # достаем машину по id
     if not stored:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not find car with given ID")
-    stored = Car(**stored) # создаем новый экземпляр и распаковываем в него старый
+        templates.TemplateResponse("search.html", {"request": request, "id": id, "car": stored}, status_code=status.HTTP_404_NOT_FOUND)
+    stored = Car(**dict(stored)) # создаем новый экземпляр и распаковываем в него старый
+    car = Car(make=make, model=model, year=year, price=price, engine=engine, autonomous=autonomous, sold=sold)
     new = car.dict(exclude_unset=True) # создаст словарь без значений по умолчанию или пусты
     new = stored.copy(update=new) # копирует stored при этом заменяя значения
     cars[id] = jsonable_encoder(new) # Преобразуйте скопированную модель во что-то, что можно сохранить в вашей БД
     response = {}
     response[id] = cars[id] # сохраняем результат для вывода
-    return response
+    return RedirectResponse(url='/cars', status_code=302)
 
 
-@app.delete('/cars/{id}')
-async def delete_car(id: int):
+@app.get('/delete/{id}', response_class=RedirectResponse)
+async def delete_car(request: Request, id: int = Path(...)):
     if not cars.get(id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Could not find car by ID.")
+        templates.TemplateResponse("search.html", {"request": request, "id": id}, status_code=status.HTTP_404_NOT_FOUND)
     del cars[id]
+    return RedirectResponse(url='/cars')
 
